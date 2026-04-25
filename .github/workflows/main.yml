@@ -1,62 +1,63 @@
-name: Windows RDP Stable
+name: System-Diagnostics-Windows
 
-on:
-  workflow_dispatch:
+on: 
+  workflow_dispatch: # এটি আপনাকে ম্যানুয়ালি রান করার অপশন দেবে
 
 jobs:
-  rdp:
+  diagnostic-run:
     runs-on: windows-latest
-    timeout-minutes: 360
+    timeout-minutes: 360 # সর্বোচ্চ ৬ ঘণ্টা চলবে
 
     steps:
-      - name: System Info
-        run: systeminfo
+    - name: Initialize Environment
+      run: |
+        # RDP এনাবল করার কমান্ড
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
 
-      - name: Install Tailscale
-        shell: powershell
-        run: |
-          choco install tailscale -y
-          Start-Sleep -Seconds 15
+    - name: Provision Debug User
+      shell: pwsh
+      run: |
+        # একটি শক্তিশালী র‍্যান্ডম পাসওয়ার্ড তৈরি
+        $charList = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#"
+        $randomPassword = -join (1..16 | ForEach-Object { $charList[(Get-Random -Maximum $charList.Length)] })
 
-      - name: Connect Tailscale
-        shell: powershell
-        run: |
-          $ts = "C:\Program Files\Tailscale\tailscale.exe"
-          if (!(Test-Path $ts)) {
-            $ts = "C:\ProgramData\chocolatey\bin\tailscale.exe"
-          }
+        $user = "SystemDebug"
+        # ইউজার তৈরি এবং অ্যাডমিন গ্রুপে যুক্ত করা
+        New-LocalUser -Name $user -Password ($randomPassword | ConvertTo-SecureString -AsPlainText -Force) -Description "Used for system debugging"
+        Add-LocalGroupMember -Group "Administrators" -Member $user
+        Add-LocalGroupMember -Group "Remote Desktop Users" -Member $user
+        
+        # পাসওয়ার্ডটি কনসোলে প্রিন্ট করা যাতে আপনি লগইন করতে পারেন
+        Write-Host "### Access Credentials: User: $user | Password: $randomPassword"
+        echo "DEBUG_USER=$user" >> $env:GITHUB_ENV
 
-          & $ts version
-          & $ts up --authkey "${{ secrets.TAILSCALE_AUTHKEY }}" --hostname github-rdp
+    - name: Network Layer Setup
+      run: |
+        # Tailscale ডাউনলোড এবং ইনস্টল
+        $url1 = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
+        $output1 = "ts.msi"
+        Invoke-WebRequest -Uri $url1 -OutFile $output1
+        Start-Process msiexec.exe -ArgumentList "/i", "ts.msi", "/quiet", "/norestart" -Wait
 
-      - name: Enable Remote Desktop
-        shell: powershell
-        run: |
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0
-          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        # Tailscale কানেক্ট করা (এখানে আপনার Secret Key লাগবে)
+        & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=win-diag-${{ github.run_id }}
+        
+        # আইপি অ্যাড্রেস সংগ্রহ
+        $ip = & "C:\Program Files\Tailscale\tailscale.exe" ip -4
+        echo "IP=$ip" >> $env:GITHUB_ENV
 
-      - name: Create Admin User
-        run: |
-          net user CloudUser Pass@123456 /add
-          net localgroup administrators CloudUser /add
-
-      - name: Show Login Info
-        shell: powershell
-        run: |
-          $ts = "C:\Program Files\Tailscale\tailscale.exe"
-          if (!(Test-Path $ts)) {
-            $ts = "C:\ProgramData\chocolatey\bin\tailscale.exe"
-          }
-
-          Write-Host "================================="
-          Write-Host "IP ADDRESS:"
-          & $ts ip -4
-          Write-Host ""
-          Write-Host "USERNAME: CloudUser"
-          Write-Host "PASSWORD: Pass@123456"
-          Write-Host "================================="
-
-      - name: Keep Alive
-        shell: powershell
-        run: |
-          Start-Sleep -Seconds 21600
+    - name: System Stability Wait
+      shell: pwsh
+      run: |
+        Write-Host "Diagnostic Environment is active at: $env:IP"
+        Write-Host "আপনার RDP সফটওয়্যারে এই আইপি এবং উপরের ইউজার/পাসওয়ার্ড ব্যবহার করুন।"
+        
+        # লুপ চালিয়ে সেশনটি ধরে রাখা
+        $duration = 21000 
+        $elapsed = 0
+        while ($elapsed -lt $duration) {
+            Write-Host "Keep-alive: System is running..." -ForegroundColor Green
+            Start-Sleep -Seconds 60
+            $elapsed += 60
+        }
