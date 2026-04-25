@@ -9,31 +9,40 @@ jobs:
     timeout-minutes: 360
 
     steps:
+      - name: System Info
+        run: systeminfo
+
       - name: Install Tailscale
-        run: |
-          choco install tailscale -y
+        run: choco install tailscale -y
 
       - name: Connect Tailscale
         shell: powershell
         run: |
           & "C:\Program Files\Tailscale\tailscale.exe" up --authkey "${{ secrets.TAILSCALE_AUTHKEY }}"
 
-      - name: Enable RDP
+      - name: Enable Remote Desktop
+        shell: powershell
         run: |
-          reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
 
-      - name: Create User
+      - name: Create Admin User
         run: |
           net user CloudUser Pass@123456 /add
           net localgroup administrators CloudUser /add
 
-      - name: Show Login
+      - name: Show Login Info
         shell: powershell
         run: |
+          Write-Host "================================="
+          Write-Host "IP ADDRESS:"
+          & "C:\Program Files\Tailscale\tailscale.exe" ip -4
+          Write-Host ""
           Write-Host "USERNAME: CloudUser"
           Write-Host "PASSWORD: Pass@123456"
-          & "C:\Program Files\Tailscale\tailscale.exe" ip
+          Write-Host "================================="
 
       - name: Keep Alive
-        run: timeout /t 21600
+        shell: powershell
+        run: |
+          Start-Sleep -Seconds 21600
