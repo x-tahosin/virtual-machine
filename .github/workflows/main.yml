@@ -1,4 +1,4 @@
-name: Best Windows RDP Fixed
+name: Windows RDP Stable
 
 on:
   workflow_dispatch:
@@ -13,12 +13,21 @@ jobs:
         run: systeminfo
 
       - name: Install Tailscale
-        run: choco install tailscale -y
+        shell: powershell
+        run: |
+          choco install tailscale -y
+          Start-Sleep -Seconds 15
 
       - name: Connect Tailscale
         shell: powershell
         run: |
-          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey "${{ secrets.TAILSCALE_AUTHKEY }}"
+          $ts = "C:\Program Files\Tailscale\tailscale.exe"
+          if (!(Test-Path $ts)) {
+            $ts = "C:\ProgramData\chocolatey\bin\tailscale.exe"
+          }
+
+          & $ts version
+          & $ts up --authkey "${{ secrets.TAILSCALE_AUTHKEY }}" --hostname github-rdp
 
       - name: Enable Remote Desktop
         shell: powershell
@@ -34,9 +43,14 @@ jobs:
       - name: Show Login Info
         shell: powershell
         run: |
+          $ts = "C:\Program Files\Tailscale\tailscale.exe"
+          if (!(Test-Path $ts)) {
+            $ts = "C:\ProgramData\chocolatey\bin\tailscale.exe"
+          }
+
           Write-Host "================================="
           Write-Host "IP ADDRESS:"
-          & "C:\Program Files\Tailscale\tailscale.exe" ip -4
+          & $ts ip -4
           Write-Host ""
           Write-Host "USERNAME: CloudUser"
           Write-Host "PASSWORD: Pass@123456"
