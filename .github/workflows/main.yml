@@ -1,4 +1,4 @@
-name: Best Windows RDP
+name: Best Windows RDP Fixed
 
 on:
   workflow_dispatch:
@@ -9,37 +9,31 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      - name: System Info
-        run: |
-          systeminfo
-
       - name: Install Tailscale
         run: |
           choco install tailscale -y
 
       - name: Connect Tailscale
+        shell: powershell
         run: |
-          tailscale up --authkey ${{ secrets.TAILSCALE_AUTHKEY }}
+          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey "${{ secrets.TAILSCALE_AUTHKEY }}"
 
       - name: Enable RDP
         run: |
           reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
 
-      - name: Create Admin User
+      - name: Create User
         run: |
           net user CloudUser Pass@123456 /add
           net localgroup administrators CloudUser /add
 
-      - name: Show Login Info
+      - name: Show Login
         shell: powershell
         run: |
-          Write-Host "================================="
           Write-Host "USERNAME: CloudUser"
           Write-Host "PASSWORD: Pass@123456"
-          tailscale ip
-          Write-Host "================================="
+          & "C:\Program Files\Tailscale\tailscale.exe" ip
 
       - name: Keep Alive
-        run: |
-          timeout /t 21600
+        run: timeout /t 21600
